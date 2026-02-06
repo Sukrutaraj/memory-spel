@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>Memory – Lagspel</title>
+
+<style>
+html,body{
+  margin:0;
+  padding:0;
+  font-family:system-ui,sans-serif;
+  transition:background-color 0.3s;
+}
+
+/* ===== BAKGRUND VISAR TUR ===== */
+body.blueTurn{ background:#e6f1ff; }
+body.orangeTurn{ background:#fff1e0; }
+
+/* ===== TOPP ===== */
+#controls{
+  padding:10px;
+  text-align:center;
+  font-size:22px;
+  font-weight:bold;
+}
+
+/* ===== SPELYTA ===== */
+#board{
+  position:relative;
+  width:100vw;
+  height:calc(100vh - 80px);
+  overflow:hidden;
+  touch-action:none;
+}
+
+/* ===== TURTEXT ===== */
+.turnBlue{ color:#2f7edb; }
+.turnOrange{ color:#e68a00; }
+
+/* ===== KORT ===== */
+.card{
+  position:absolute;
+  width:120px;
+  height:120px;
+  background:#bbb;
+  border-radius:12px;
+  user-select:none;
+  border:5px solid transparent;
+  touch-action:none;
+}
+
+.card img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  border-radius:8px;
+  display:none;
+}
+
+.card.faceup img{ display:block; }
+.card.faceup{ background:#fff; }
+
+.card.blue{ border-color:#2f7edb; }
+.card.orange{ border-color:#e68a00; }
+</style>
+</head>
+
+<body class="blueTurn">
+
+<div id="controls">
+  Tur: <span id="turnText" class="turnBlue">Blå</span>
+  &nbsp;|&nbsp;
+  Antal kort:
+  <select id="count">
+    <option>4</option>
+    <option>8</option>
+    <option>12</option>
+    <option>16</option>
+    <option>24</option>
+    <option>36</option>
+    <option>54</option>
+  </select>
+  <button onclick="start()">Start</button>
+</div>
+
+<div id="board"></div>
+
+<script>
+/* ===== BLOCKERA SAMSUNG FLIP LONG PRESS ===== */
+document.addEventListener("contextmenu", e => {
+  e.preventDefault();
+});
+
+/* ===== GLOBALT ===== */
+const board = document.getElementById("board");
+const turnText = document.getElementById("turnText");
+
+let cards = [];
+let openCards = [];
+let currentTeam = "blue";
+let holdTimer = null;
+
+/* tolerans för skakiga händer */
+const MOVE_THRESHOLD = 10;
+
+/* ===== TUR ===== */
+function updateTurn(){
+  if(currentTeam === "blue"){
+    document.body.className = "blueTurn";
+    turnText.textContent = "Blå";
+    turnText.className = "turnBlue";
+  } else {
+    document.body.className = "orangeTurn";
+    turnText.textContent = "Orange";
+    turnText.className = "turnOrange";
+  }
+}
+
+function switchTurn(){
+  currentTeam = currentTeam === "blue" ? "orange" : "blue";
+  updateTurn();
+}
+
+/* ===== START ===== */
+function start(){
+  board.innerHTML = "";
+  cards = [];
+  openCards = [];
+  currentTeam = "blue";
+  updateTurn();
+
+  const count = parseInt(document.getElementById("count").value);
+  const pairs = count / 2;
+
+  const images = [];
+  for(let i=1;i<=pairs;i++){
+    images.push(`img${i}.jpg`);
+    images.push(`img${i}.jpg`);
+  }
+  shuffle(images);
+
+  images.forEach(src=>{
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.image = src;
+    card.dataset.paired = "false";
+
+    const img = document.createElement("img");
+    img.src = src;
+    card.appendChild(img);
+
+    card.style.left = Math.random()*(board.clientWidth-140)+"px";
+    card.style.top  = Math.random()*(board.clientHeight-140)+"px";
+
+    makeDraggable(card);
+    makeHold(card);
+
+    board.appendChild(card);
+    cards.push(card);
+  });
+}
+
+/* ===== HOLD FÖR ATT VÄNDA ===== */
+function makeHold(card){
+  let startX, startY;
+  let movedTooMuch = false;
+
+  card.addEventListener("pointerdown",e=>{
+    if(card.dataset.paired === "true") return;
+
+    startX = e.clientX;
+    startY = e.clientY;
+    movedTooMuch = false;
+
+    holdTimer = setTimeout(()=>{
+      if(!movedTooMuch){
+        card.classList.add("faceup");
+        openCards.push(card);
+
+        if(openCards.length === 2){
+          checkPair();
+        }
+      }
+    },700);
+  });
+
+  card.addEventListener("pointermove",e=>{
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if(Math.hypot(dx,dy) > MOVE_THRESHOLD){
+      movedTooMuch = true;
+      clearTimeout(holdTimer);
+    }
+  });
+
+  card.addEventListener("pointerup",()=>{
+    clearTimeout(holdTimer);
+  });
+}
+
+/* ===== KOLLA PAR ===== */
+function checkPair(){
+  const [a,b] = openCards;
+
+  if(a.dataset.image === b.dataset.image){
+    a.dataset.paired = "true";
+    b.dataset.paired = "true";
+    a.classList.add(currentTeam);
+    b.classList.add(currentTeam);
+  } else {
+    setTimeout(()=>{
+      a.classList.remove("faceup");
+      b.classList.remove("faceup");
+    },1500);
+    switchTurn();
+  }
+
+  openCards = [];
+}
+
+/* ===== DRAG – FIXAD FÖR TOUCH ===== */
+function makeDraggable(el){
+  let offsetX, offsetY;
+
+  el.addEventListener("pointerdown",e=>{
+    offsetX = e.clientX - el.offsetLeft;
+    offsetY = e.clientY - el.offsetTop;
+    el.setPointerCapture(e.pointerId);
+  });
+
+  el.addEventListener("pointermove",e=>{
+    el.style.left = (e.clientX - offsetX) + "px";
+    el.style.top  = (e.clientY - offsetY) + "px";
+  });
+}
+
+/* ===== SHUFFLE ===== */
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+}
+</script>
+
+</body>
+</html>
