@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
 <meta charset="UTF-8">
-<title>Memory – Lagspel</title>
+<title>Språk-Memory</title>
 
 <style>
 html,body{
@@ -12,11 +12,10 @@ html,body{
   transition:background-color 0.3s;
 }
 
-/* ===== BAKGRUND VISAR TUR ===== */
-body.blueTurn{ background:#e6f1ff; }
-body.orangeTurn{ background:#fff1e0; }
+body.setup{ background:#f2efe9; }
+body.blueTurn{ background:#7fb3c8; }
+body.orangeTurn{ background:#e6b566; }
 
-/* ===== TOPP ===== */
 #controls{
   padding:10px;
   text-align:center;
@@ -24,28 +23,27 @@ body.orangeTurn{ background:#fff1e0; }
   font-weight:bold;
 }
 
-/* ===== SPELYTA ===== */
+#controls button{
+  font-size:26px;
+  margin-left:10px;
+}
+
 #board{
   position:relative;
   width:100vw;
-  height:calc(100vh - 80px);
+  height:calc(100vh - 120px);
   overflow:hidden;
   touch-action:none;
 }
 
-/* ===== TURTEXT ===== */
-.turnBlue{ color:#2f7edb; }
-.turnOrange{ color:#e68a00; }
-
-/* ===== KORT ===== */
 .card{
   position:absolute;
   width:120px;
   height:120px;
   background:#bbb;
   border-radius:12px;
+  border:2px solid #333;
   user-select:none;
-  border:5px solid transparent;
   touch-action:none;
 }
 
@@ -60,187 +58,305 @@ body.orangeTurn{ background:#fff1e0; }
 .card.faceup img{ display:block; }
 .card.faceup{ background:#fff; }
 
-.card.blue{ border-color:#2f7edb; }
-.card.orange{ border-color:#e68a00; }
+.card.blue{
+  border-color:#2f6f86;
+  border-width:6px;
+}
+
+.card.orange{
+  border-color:#b8742a;
+  border-width:6px;
+}
+
+#setup{
+  text-align:center;
+  padding:20px;
+}
+
+.hidden{ display:none; }
 </style>
 </head>
 
-<body class="blueTurn">
+<body class="setup">
 
-<div id="controls">
-  Tur: <span id="turnText" class="turnBlue">Blå</span>
-  &nbsp;|&nbsp;
-  Antal kort:
-  <select id="count">
-    <option>4</option>
-    <option>8</option>
-    <option>12</option>
-    <option>16</option>
-    <option>24</option>
-    <option>36</option>
-    <option>54</option>
+<div id="setup">
+  <h2>Språk-Memory</h2>
+
+  <p>Hur många ord?</p>
+  <select id="imageCount">
+    <option value="2">2 ord (4 kort)</option>
+    <option value="4">4 ord (8 kort)</option>
+    <option value="8">8 ord (16 kort)</option>
   </select>
-  <button onclick="start()">Start</button>
+
+  <br><br>
+
+  <p>Hur vill du vända kort?</p>
+  <select id="flipMode">
+    <option value="hold">Håll fingret på kort</option>
+    <option value="button">Tryck på knapp</option>
+  </select>
+
+  <br><br>
+  <button onclick="startGame()">▶ Spela</button>
+</div>
+
+<div id="controls" class="hidden">
+  Tur: <span id="turnText">Blå</span>
+  <button onclick="playAgain()">🔁</button>
+  <button onclick="goHome()">🏠</button>
 </div>
 
 <div id="board"></div>
 
 <script>
-/* ===== BLOCKERA SAMSUNG FLIP LONG PRESS ===== */
-document.addEventListener("contextmenu", e => {
-  e.preventDefault();
-});
 
-/* ===== GLOBALT ===== */
+document.addEventListener("contextmenu", e => e.preventDefault());
+
 const board = document.getElementById("board");
 const turnText = document.getElementById("turnText");
+const setupDiv = document.getElementById("setup");
+const controls = document.getElementById("controls");
 
-let cards = [];
-let openCards = [];
 let currentTeam = "blue";
+let openCards = [];
 let holdTimer = null;
+let lastCount = 0;
+let flipMode = "hold";
 
-/* tolerans för skakiga händer */
-const MOVE_THRESHOLD = 10;
+const MOVE_THRESHOLD = 25;
 
-/* ===== TUR ===== */
-function updateTurn(){
-  if(currentTeam === "blue"){
-    document.body.className = "blueTurn";
-    turnText.textContent = "Blå";
-    turnText.className = "turnBlue";
-  } else {
-    document.body.className = "orangeTurn";
-    turnText.textContent = "Orange";
-    turnText.className = "turnOrange";
-  }
-}
+function startGame(){
 
-function switchTurn(){
-  currentTeam = currentTeam === "blue" ? "orange" : "blue";
-  updateTurn();
-}
+  const count = parseInt(document.getElementById("imageCount").value);
+  flipMode = document.getElementById("flipMode").value;
 
-/* ===== START ===== */
-function start(){
+  lastCount = count;
+
   board.innerHTML = "";
-  cards = [];
   openCards = [];
   currentTeam = "blue";
-  updateTurn();
 
-  const count = parseInt(document.getElementById("count").value);
-  const pairs = count / 2;
+  setupDiv.classList.add("hidden");
+  controls.classList.remove("hidden");
+  document.body.className = "blueTurn";
+  turnText.textContent = "Blå";
 
-  const images = [];
-  for(let i=1;i<=pairs;i++){
-    images.push(`img${i}.jpg`);
-    images.push(`img${i}.jpg`);
+  const cards = [];
+
+  for(let i=1;i<=count;i++){
+
+    cards.push({
+      id: i,
+      image: `img${i}_sv.jpg`,
+      audio: `img${i}_sv.mp3`
+    });
+
+    cards.push({
+      id: i,
+      image: `img${i}_ar.jpg`,
+      audio: `img${i}_ar.mp3`
+    });
+
   }
-  shuffle(images);
 
-  images.forEach(src=>{
+  shuffle(cards);
+  createCards(cards);
+}
+
+function playAgain(){
+  if(lastCount === 0) return;
+  document.getElementById("imageCount").value = lastCount;
+  startGame();
+}
+
+function goHome(){
+  board.innerHTML = "";
+  openCards = [];
+  lastCount = 0;
+  document.body.className = "setup";
+  setupDiv.classList.remove("hidden");
+  controls.classList.add("hidden");
+}
+
+function createCards(cards){
+
+  cards.forEach(cardData=>{
+
     const card = document.createElement("div");
     card.className = "card";
-    card.dataset.image = src;
+    card.dataset.id = cardData.id;
+    card.dataset.audio = cardData.audio;
     card.dataset.paired = "false";
 
     const img = document.createElement("img");
-    img.src = src;
+    img.src = cardData.image;
     card.appendChild(img);
 
     card.style.left = Math.random()*(board.clientWidth-140)+"px";
     card.style.top  = Math.random()*(board.clientHeight-140)+"px";
 
-    makeDraggable(card);
-    makeHold(card);
+    if(flipMode==="hold"){
+      makeHold(card);
+    }else{
+      makeButton(card);
+    }
+
+    makeDrag(card);
 
     board.appendChild(card);
-    cards.push(card);
   });
+
 }
 
-/* ===== HOLD FÖR ATT VÄNDA ===== */
 function makeHold(card){
-  let startX, startY;
-  let movedTooMuch = false;
+
+  let startX,startY,moved=false;
 
   card.addEventListener("pointerdown",e=>{
-    if(card.dataset.paired === "true") return;
 
-    startX = e.clientX;
-    startY = e.clientY;
-    movedTooMuch = false;
+    if(card.dataset.paired==="true") return;
 
-    holdTimer = setTimeout(()=>{
-      if(!movedTooMuch){
+    startX=e.clientX;
+    startY=e.clientY;
+    moved=false;
+
+    holdTimer=setTimeout(()=>{
+
+      if(!moved){
+
         card.classList.add("faceup");
+
+        const audio = new Audio(card.dataset.audio);
+        audio.play();
+
         openCards.push(card);
 
-        if(openCards.length === 2){
-          checkPair();
-        }
+        if(openCards.length===2) checkPair();
+
       }
+
     },700);
+
   });
 
   card.addEventListener("pointermove",e=>{
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    if(Math.hypot(dx,dy) > MOVE_THRESHOLD){
-      movedTooMuch = true;
+    if(Math.hypot(e.clientX-startX,e.clientY-startY)>MOVE_THRESHOLD){
+      moved=true;
       clearTimeout(holdTimer);
     }
   });
 
-  card.addEventListener("pointerup",()=>{
-    clearTimeout(holdTimer);
-  });
+  card.addEventListener("pointerup",()=>clearTimeout(holdTimer));
 }
 
-/* ===== KOLLA PAR ===== */
-function checkPair(){
-  const [a,b] = openCards;
+function makeButton(card){
 
-  if(a.dataset.image === b.dataset.image){
-    a.dataset.paired = "true";
-    b.dataset.paired = "true";
+  const btn=document.createElement("div");
+
+  btn.textContent="🔍";
+
+  btn.style.position="absolute";
+  btn.style.bottom="5px";
+  btn.style.right="5px";
+  btn.style.background="#fff";
+  btn.style.border="2px solid #333";
+  btn.style.borderRadius="8px";
+  btn.style.padding="4px 8px";
+  btn.style.fontSize="18px";
+  btn.style.cursor="pointer";
+
+  card.appendChild(btn);
+
+  btn.addEventListener("pointerdown",e=>{
+
+    e.stopPropagation();
+
+    if(card.dataset.paired==="true") return;
+
+    card.classList.add("faceup");
+
+    const audio = new Audio(card.dataset.audio);
+    audio.play();
+
+    openCards.push(card);
+
+    if(openCards.length===2) checkPair();
+
+  });
+
+}
+
+function checkPair(){
+
+  const [a,b]=openCards;
+
+  if(a.dataset.id === b.dataset.id){
+
+    a.dataset.paired="true";
+    b.dataset.paired="true";
+
     a.classList.add(currentTeam);
     b.classList.add(currentTeam);
-  } else {
+
+  }else{
+
     setTimeout(()=>{
       a.classList.remove("faceup");
       b.classList.remove("faceup");
     },1500);
+
     switchTurn();
+
   }
 
-  openCards = [];
+  openCards=[];
 }
 
-/* ===== DRAG – FIXAD FÖR TOUCH ===== */
-function makeDraggable(el){
-  let offsetX, offsetY;
+function switchTurn(){
+
+  currentTeam=currentTeam==="blue"?"orange":"blue";
+
+  document.body.className=currentTeam+"Turn";
+
+  turnText.textContent=currentTeam==="blue"?"Blå":"Orange";
+}
+
+function makeDrag(el){
+
+  let ox,oy,activePointer=null;
 
   el.addEventListener("pointerdown",e=>{
-    offsetX = e.clientX - el.offsetLeft;
-    offsetY = e.clientY - el.offsetTop;
-    el.setPointerCapture(e.pointerId);
+    ox=e.clientX-el.offsetLeft;
+    oy=e.clientY-el.offsetTop;
+    activePointer=e.pointerId;
+    el.setPointerCapture(activePointer);
   });
 
   el.addEventListener("pointermove",e=>{
-    el.style.left = (e.clientX - offsetX) + "px";
-    el.style.top  = (e.clientY - offsetY) + "px";
+    if(e.pointerId!==activePointer) return;
+    el.style.left=(e.clientX-ox)+"px";
+    el.style.top=(e.clientY-oy)+"px";
   });
-}
 
-/* ===== SHUFFLE ===== */
-function shuffle(arr){
-  for(let i=arr.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [arr[i],arr[j]] = [arr[j],arr[i]];
+  el.addEventListener("pointerup",()=>release());
+  el.addEventListener("pointercancel",()=>release());
+
+  function release(){
+    if(activePointer!==null){
+      el.releasePointerCapture(activePointer);
+      activePointer=null;
+    }
   }
 }
+
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+}
+
 </script>
 
 </body>
